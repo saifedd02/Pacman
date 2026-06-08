@@ -1,46 +1,27 @@
 from __future__ import annotations
-# Erlaubt die Verwendung von "Knoten" als Rückgabetyp
-# bevor die Klasse vollständig definiert ist.
-
 from copy import deepcopy
-# deepcopy erstellt eine echte Kopie eines Objekts.
-# Wir brauchen das, damit jede Map unabhängig bleibt.
-
 from game_core.config import TILE_TYPES
-# Enthält die Spielfeldwerte des Servers.
-# Beispiel: Wand, Pacman, Dot usw.
 
 
 class Knoten:
     # Ein Knoten repräsentiert einen Zustand des Spiels.
 
-    def __init__(self, view, pacman_pos, parent=None, action=None, cost=0):
-
+    def __init__(self, view, pacman_pos, parent=None, action=None, cost=0, eaten_dot=False):
         self.view = view
-        # Aktuelles Spielfeld (Map)
-
         self.pacman_pos = pacman_pos
-        # Position von Pacman
-        # Beispiel: (5, 3)
-
         self.parent = parent
-        # Vorgängerknoten
-        # Damit kann später der Lösungsweg rekonstruiert werden.
-
         self.action = action
-        # Welche Aktion führte zu diesem Knoten?
-        # 0=links, 1=rechts, 2=oben, 3=unten
-
         self.cost = cost
-        # Bisherige Wegkosten
-        # Bei jedem Schritt +1
 
+        # Wichtig für P3:
+        # True bedeutet: Dieser Knoten ist entstanden,
+        # weil Pacman gerade auf einen Dot gelaufen ist.
+        self.eaten_dot = eaten_dot
 
     def expand(self) -> list["Knoten"]:
         # Erzeugt alle möglichen Nachfolgerknoten.
 
         kinder = []
-        # Hier speichern wir alle erzeugten Kindknoten.
 
         richtungen = {
             0: (0, -1),   # links
@@ -49,47 +30,44 @@ class Knoten:
             3: (1, 0)     # unten
         }
 
-        # Für jede mögliche Bewegung
         for action, (dx, dy) in richtungen.items():
 
             neue_x = self.pacman_pos[0] + dx
-            # Neue Zeile berechnen
-
             neue_y = self.pacman_pos[1] + dy
-            # Neue Spalte berechnen
 
-            # Prüfen ob dort KEINE Wand ist
-            if self.view[neue_x][neue_y] != TILE_TYPES["#"]:
+            anzahl_zeilen = len(self.view)
+            anzahl_spalten = len(self.view[0])
 
-                neue_view = deepcopy(self.view)
-                # Neue unabhängige Kopie der Map erstellen
+            # Wenn neue Position außerhalb der Map ist: überspringen.
+            if not (0 <= neue_x < anzahl_zeilen and 0 <= neue_y < anzahl_spalten):
+                continue
 
-                alte_x, alte_y = self.pacman_pos
-                # Aktuelle Position von Pacman
+            zielfeld = self.view[neue_x][neue_y]
 
-                neue_view[alte_x][alte_y] = TILE_TYPES[" "]
-                # Altes Feld wird leer
+            # Wand darf Pacman nicht betreten.
+            if zielfeld == TILE_TYPES["#"]:
+                continue
 
-                neue_view[neue_x][neue_y] = TILE_TYPES["P"]
-                # Pacman auf neue Position setzen
+            neue_view = deepcopy(self.view)
 
-                kind = Knoten(
-                    neue_view,
-                    (neue_x, neue_y),
-                    parent=self,
-                    action=action,
-                    cost=self.cost + 1
-                )
+            alte_x, alte_y = self.pacman_pos
 
-                # Neuer Kindknoten:
-                # neue Map
-                # neue Position
-                # Vorgänger = aktueller Knoten
-                # ausgeführte Aktion speichern
-                # Kosten erhöhen
+            # Alte Pacman-Position leer machen.
+            neue_view[alte_x][alte_y] = TILE_TYPES[" "]
 
-                kinder.append(kind)
-                # Kindknoten zur Liste hinzufügen
+            # Neue Pacman-Position setzen.
+            # Falls dort ein Dot war, wird er dadurch in der Suchkarte entfernt.
+            neue_view[neue_x][neue_y] = TILE_TYPES["P"]
+
+            kind = Knoten(
+                neue_view,
+                (neue_x, neue_y),
+                parent=self,
+                action=action,
+                cost=self.cost + 1,
+                eaten_dot=(zielfeld == TILE_TYPES["*"])
+            )
+
+            kinder.append(kind)
 
         return kinder
-        # Alle erzeugten Kindknoten zurückgeben

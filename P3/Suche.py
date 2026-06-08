@@ -3,22 +3,22 @@ from game_core.config import TILE_TYPES
 
 
 class Suche:
+    # Diese Klasse enthält alle Suchstrategien aus Praktikum 3.
+    # Wichtig: Wir suchen jetzt NICHT mehr direkt nach "alle Dots weg",
+    # sondern nach dem nächsten gefressenen Dot.
+    # Danach startet PacmanAgent wieder eine neue Suche.
 
     def ist_ziel(self, knoten):
-        # Ziel ist erreicht, wenn keine Dots mehr im Spielfeld sind.
-        for zeile in knoten.view:
-            for feld in zeile:
-                if feld == TILE_TYPES["*"]:
-                    return False
-        return True
+        # Ziel dieses Suchlaufs:
+        # Pacman hat in diesem Knoten gerade einen Dot gefressen.
+        return knoten.eaten_dot
 
     def zustand_als_key(self, knoten):
-        # Macht die Map vergleichbar, damit closed_list prüfen kann,
-        # ob ein Zustand schon besucht wurde.
+        # Macht den Zustand vergleichbar für die Closed-List.
         return tuple(tuple(zeile) for zeile in knoten.view)
 
     def loesungsweg(self, zielknoten):
-        # Baut vom Zielknoten zurück zum Startknoten die Aktionen auf.
+        # Vom Zielknoten zurück zum Start laufen.
         aktionen = []
         aktueller_knoten = zielknoten
 
@@ -26,25 +26,75 @@ class Suche:
             aktionen.append(aktueller_knoten.action)
             aktueller_knoten = aktueller_knoten.parent
 
+        # Umkehren: Wir wollen vom Start zum Ziel laufen.
         aktionen.reverse()
         return aktionen
 
-    def starte_Suchalgorithmus(self, node: Knoten) -> Knoten:
+    def heuristik(self, knoten):
+        # Manhattan-Distanz zum nächsten Dot.
+        pacman_x, pacman_y = knoten.pacman_pos
+        kleinste_distanz = None
+
+        for x, zeile in enumerate(knoten.view):
+            for y, feld in enumerate(zeile):
+                if feld == TILE_TYPES["*"]:
+                    distanz = abs(pacman_x - x) + abs(pacman_y - y)
+
+                    if kleinste_distanz is None or distanz < kleinste_distanz:
+                        kleinste_distanz = distanz
+
+        if kleinste_distanz is None:
+            return 0
+
+        return kleinste_distanz
+
+    def bewertung(self, knoten, strategie):
+        # Bewertung für UCS, Greedy und A*
+        if strategie == "UCS":
+            return knoten.cost
+
+        if strategie == "Greedy":
+            return self.heuristik(knoten)
+
+        if strategie == "A-Stern":
+            return knoten.cost + self.heuristik(knoten)
+
+        return 0
+
+    def insert(self, open_list, kind, strategie):
+        # INSERT bestimmt die Suchstrategie.
+
+        if strategie == "Tiefensuche":
+            # Stack-Prinzip: vorne einfügen.
+            open_list.insert(0, kind)
+
+        elif strategie == "Breitensuche":
+            # Queue-Prinzip: hinten anhängen.
+            open_list.append(kind)
+
+        else:
+            # UCS, Greedy, A*: nach Bewertung sortiert einfügen.
+            wert = self.bewertung(kind, strategie)
+            position = 0
+
+            while position < len(open_list) and self.bewertung(open_list[position], strategie) <= wert:
+                position += 1
+
+            open_list.insert(position, kind)
+
+    def starte_Suchalgorithmus(self, node: Knoten, strategie="Breitensuche") -> Knoten:
         """
         node: Startknoten
+        strategie: Breitensuche | Tiefensuche | UCS | Greedy | A-Stern
         return: Zielknoten oder None
         """
 
         open_list = [node]
-        # Noch zu untersuchende Knoten.
-
         closed_list = set()
-        # Bereits besuchte Zustände.
 
         while len(open_list) > 0:
 
             aktueller_knoten = open_list.pop(0)
-            # Breitensuche: immer den ersten Knoten nehmen.
 
             zustand = self.zustand_als_key(aktueller_knoten)
 
@@ -56,10 +106,11 @@ class Suche:
             if self.ist_ziel(aktueller_knoten):
                 aktionen = self.loesungsweg(aktueller_knoten)
 
-                print("Ziel gefunden!")
+                print("Strategie:", strategie)
+                print("Nächster Dot gefunden!")
                 print("OpenList:", len(open_list))
                 print("ClosedList:", len(closed_list))
-                print("Länge der Lösung:", len(aktionen))
+                print("Laenge der Loesung:", len(aktionen))
                 print("Aktionen:", aktionen)
 
                 return aktueller_knoten
@@ -67,10 +118,10 @@ class Suche:
             kinder = aktueller_knoten.expand()
 
             for kind in kinder:
-                open_list.append(kind)
-                # Hinten einfügen = Breitensuche.
+                self.insert(open_list, kind, strategie)
 
-        print("Keine Lösung gefunden.")
+        print("Strategie:", strategie)
+        print("Kein Dot gefunden.")
         print("OpenList:", len(open_list))
         print("ClosedList:", len(closed_list))
 
